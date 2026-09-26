@@ -6,8 +6,8 @@ import UIKit
 
 @objc public protocol CHEMCameraEngineDelegate: AnyObject {
   func cameraEngineDidChangeState(_ state: String, reason: String, code: String)
-  func cameraEngineDidChangeLenses(_ lenses: [[String: String]])
-  func cameraEngineDidActivateLens(_ lens: [String: String])
+  func cameraEngineDidChangeLenses(_ lenses: [[String: Any]])
+  func cameraEngineDidActivateLens(_ lens: [String: Any])
   func cameraEngineDidChangeExposure(_ exposure: [String: NSNumber])
   func cameraEngineDidChangeTelemetry(_ telemetry: [String: Any])
   func cameraEngineDidChangePerformanceMetrics(_ metrics: [String: Any])
@@ -65,6 +65,7 @@ import UIKit
       sessionController.reportRendererFailure(failureMessage)
       return
     }
+    renderer.setActive(active)
     sessionController.setActive(active)
   }
 
@@ -98,12 +99,12 @@ import UIKit
   }
 
   @objc public func updatePreviewGeometry(width: Double, height: Double, orientation: Int) {
-    let uiOrientation = UIInterfaceOrientation(rawValue: orientation) ?? .portrait
-    renderer.setOrientation(orientation)
+    let cameraOrientation = CameraOrientation(rawValue: orientation) ?? .portrait
+    renderer.setOrientation(cameraOrientation.rawValue)
     sessionController.updatePreviewGeometry(CameraPreviewGeometry(
-      width: CGFloat(width),
-      height: CGFloat(height),
-      orientation: uiOrientation
+      width: width,
+      height: height,
+      orientation: cameraOrientation
     ))
   }
 
@@ -131,17 +132,24 @@ import UIKit
 
   func cameraSessionController(_ controller: CameraSessionController, didDiscover lenses: [CameraLens]) {
     let payload = lenses.map { lens in
-      ["id": lens.id, "role": lens.role.rawValue, "displayZoom": lens.displayZoom]
+      lensPayload(lens)
     }
     onMain { delegate in delegate.cameraEngineDidChangeLenses(payload) }
   }
 
   func cameraSessionController(_ controller: CameraSessionController, didActivate lens: CameraLens) {
-    let payload = ["id": lens.id, "role": lens.role.rawValue, "displayZoom": lens.displayZoom]
+    let payload = lensPayload(lens)
     #if DEBUG
     renderer.updateCameraContext(activeLens: lens.displayZoom)
     #endif
     onMain { delegate in delegate.cameraEngineDidActivateLens(payload) }
+  }
+
+  func cameraSessionController(
+    _ controller: CameraSessionController,
+    didChangeCaptureFrameRateLimit maximumFPS: Int
+  ) {
+    renderer.updateCaptureDeviceFrameRateLimit(maximumFPS)
   }
 
   func cameraSessionController(
@@ -187,11 +195,17 @@ import UIKit
       let payload: [String: Any] = [
         "id": metadata.id,
         "sourceUri": metadata.sourceUri,
-        "thumbnailUri": metadata.thumbnailUri ?? "",
+        "thumbnailUri": metadata.thumbnailUri.map { $0 as Any } ?? NSNull(),
         "width": metadata.width,
         "height": metadata.height,
         "capturedAt": metadata.capturedAt,
         "lensId": metadata.lensId,
+        "physicalDeviceId": metadata.physicalDeviceId,
+        "captureMode": metadata.captureMode.rawValue,
+        "deviceZoomFactor": metadata.deviceZoomFactor,
+        "sourceSafe": metadata.sourceSafe,
+        "complete": metadata.complete,
+        "recoverableError": metadata.recoverableError.map { $0 as Any } ?? NSNull(),
       ]
       onMain { delegate in
         CameraLogger.capture(metadata.id, stage: "event_emitted")
@@ -208,5 +222,16 @@ import UIKit
       guard let delegate = self?.delegate else { return }
       send(delegate)
     }
+  }
+
+  private func lensPayload(_ lens: CameraLens) -> [String: Any] {
+    [
+      "id": lens.id,
+      "physicalDeviceId": lens.physicalDeviceID,
+      "role": lens.role.rawValue,
+      "captureMode": lens.captureMode.rawValue,
+      "deviceZoomFactor": lens.deviceZoomFactor,
+      "displayZoom": lens.displayZoom,
+    ]
   }
 }

@@ -25,6 +25,9 @@
 		A10000000000000000000012 /* CHEMCameraPreviewComponentView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* CHEMCameraPreviewComponentView.mm */; };
 		A10000000000000000000013 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* Shaders.metal */; };
 		A10000000000000000000014 /* CameraLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* CameraLogger.swift */; };
+		A10000000000000000000015 /* CameraGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* CameraGeometry.swift */; };
+		A10000000000000000000016 /* CameraLensCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* CameraLensCatalog.swift */; };
+		A10000000000000000000017 /* PreviewFrameRatePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* PreviewFrameRatePolicy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +56,9 @@
 		A20000000000000000000013 /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		A20000000000000000000014 /* CHEMCameraPreviewComponentView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CHEMCameraPreviewComponentView.h; sourceTree = "<group>"; };
 		A20000000000000000000015 /* CameraLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraLogger.swift; sourceTree = "<group>"; };
+		A20000000000000000000016 /* CameraGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraGeometry.swift; sourceTree = "<group>"; };
+		A20000000000000000000017 /* CameraLensCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraLensCatalog.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* PreviewFrameRatePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFrameRatePolicy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,8 +73,8 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A30000000000000000000001 /* CameraCore */ = {isa = PBXGroup; children = (A20000000000000000000001 /* CameraTypes.swift */, A20000000000000000000002 /* CameraDeviceCatalog.swift */, A20000000000000000000003 /* CameraFocusController.swift */, A20000000000000000000004 /* CameraExposureController.swift */, A20000000000000000000005 /* CameraSessionController.swift */, A20000000000000000000006 /* PhotoCaptureCoordinator.swift */, A20000000000000000000007 /* CHEMCameraEngine.swift */, A20000000000000000000015 /* CameraLogger.swift */, ); path = CHEM/CameraCore; sourceTree = "<group>"; };
-		A30000000000000000000002 /* Imaging/Preview */ = {isa = PBXGroup; children = (A20000000000000000000009 /* MetalPreviewRenderer.swift */, A20000000000000000000010 /* CHEMCameraPreviewView.swift */, A20000000000000000000013 /* Shaders.metal */, ); path = CHEM/Imaging/Preview; sourceTree = "<group>"; };
+		A30000000000000000000001 /* CameraCore */ = {isa = PBXGroup; children = (A20000000000000000000001 /* CameraTypes.swift */, A20000000000000000000002 /* CameraDeviceCatalog.swift */, A20000000000000000000003 /* CameraFocusController.swift */, A20000000000000000000004 /* CameraExposureController.swift */, A20000000000000000000005 /* CameraSessionController.swift */, A20000000000000000000006 /* PhotoCaptureCoordinator.swift */, A20000000000000000000007 /* CHEMCameraEngine.swift */, A20000000000000000000015 /* CameraLogger.swift */, A20000000000000000000016 /* CameraGeometry.swift */, A20000000000000000000017 /* CameraLensCatalog.swift */, ); path = CHEM/CameraCore; sourceTree = "<group>"; };
+		A30000000000000000000002 /* Imaging/Preview */ = {isa = PBXGroup; children = (A20000000000000000000009 /* MetalPreviewRenderer.swift */, A20000000000000000000010 /* CHEMCameraPreviewView.swift */, A20000000000000000000013 /* Shaders.metal */, A20000000000000000000018 /* PreviewFrameRatePolicy.swift */, ); path = CHEM/Imaging/Preview; sourceTree = "<group>"; };
 		A30000000000000000000003 /* Storage */ = {isa = PBXGroup; children = (A20000000000000000000008 /* CaptureStore.swift */, ); path = CHEM/Storage; sourceTree = "<group>"; };
 		A30000000000000000000004 /* ReactNative */ = {isa = PBXGroup; children = (A20000000000000000000011 /* CHEMCameraModule.mm */, A20000000000000000000012 /* CHEMCameraPreviewComponentView.mm */, A20000000000000000000014 /* CHEMCameraPreviewComponentView.h */, ); path = CHEM/ReactNative; sourceTree = "<group>"; };
 		13B07FAE1A68108700A75B9A /* CHEM */ = {
@@ -296,6 +302,9 @@
 				A10000000000000000000012 /* CHEMCameraPreviewComponentView.mm in Sources */,
 				A10000000000000000000013 /* Shaders.metal in Sources */,
 				A10000000000000000000014 /* CameraLogger.swift in Sources */,
+				A10000000000000000000015 /* CameraGeometry.swift in Sources */,
+				A10000000000000000000016 /* CameraLensCatalog.swift in Sources */,
+				A10000000000000000000017 /* PreviewFrameRatePolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -322,12 +331,12 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.chem.camera;
 				PRODUCT_NAME = CHEM;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -351,11 +360,11 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.chem.camera;
 				PRODUCT_NAME = CHEM;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;

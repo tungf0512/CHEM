@@ -16,7 +16,13 @@ const captureOne: CaptureMetadata = {
   width: 4032,
   height: 3024,
   capturedAt: '2026-09-26T10:00:00.000Z',
-  lensId: 'wide-camera',
+  lensId: 'wide-camera::base',
+  physicalDeviceId: 'wide-camera',
+  captureMode: 'physicalCamera',
+  deviceZoomFactor: 1,
+  sourceSafe: true,
+  complete: true,
+  recoverableError: null,
 };
 
 describe('camera state and native boundary mapping', () => {
@@ -39,13 +45,14 @@ describe('camera state and native boundary mapping', () => {
 
   it('maps only lenses delivered by native into the selector model', () => {
     expect(mapAvailableLenses([
-      {id: 'rear-ultra', role: 'ultraWide', displayZoom: '0.5×'},
-      {id: 'rear-wide', role: 'wide', displayZoom: '1×'},
-      {id: 'unknown-lens', role: 'newRole', displayZoom: '2×'},
+      {id: 'rear-main-crop-2x', physicalDeviceId: 'rear-main', role: 'wide', captureMode: 'mainSensorCrop', deviceZoomFactor: 2, displayZoom: '2×'},
+      {id: 'rear-ultra', physicalDeviceId: 'rear-ultra', role: 'ultraWide', captureMode: 'physicalCamera', deviceZoomFactor: 1, displayZoom: '0.5×'},
+      {id: 'rear-wide', physicalDeviceId: 'rear-main', role: 'wide', captureMode: 'physicalCamera', deviceZoomFactor: 1, displayZoom: '1×'},
+      {id: 'second-2x', physicalDeviceId: 'rear-tele', role: 'telephoto', captureMode: 'physicalCamera', deviceZoomFactor: 1, displayZoom: '2×'},
     ])).toEqual([
-      {id: 'rear-ultra', role: 'ultraWide', displayZoom: '0.5×'},
-      {id: 'rear-wide', role: 'wide', displayZoom: '1×'},
-      {id: 'unknown-lens', role: 'wide', displayZoom: '2×'},
+      {id: 'rear-ultra', physicalDeviceId: 'rear-ultra', role: 'ultraWide', captureMode: 'physicalCamera', deviceZoomFactor: 1, displayZoom: '0.5×'},
+      {id: 'rear-wide', physicalDeviceId: 'rear-main', role: 'wide', captureMode: 'physicalCamera', deviceZoomFactor: 1, displayZoom: '1×'},
+      {id: 'rear-main-crop-2x', physicalDeviceId: 'rear-main', role: 'wide', captureMode: 'mainSensorCrop', deviceZoomFactor: 2, displayZoom: '2×'},
     ]);
   });
 
@@ -53,24 +60,24 @@ describe('camera state and native boundary mapping', () => {
     const withLenses = cameraReducer(initialCameraState, {
       type: 'lensesChanged',
       value: [
-        {id: 'wide-camera', role: 'wide', displayZoom: '1×'},
-        {id: 'ultra-camera', role: 'ultraWide', displayZoom: '0.5×'},
+        {id: 'wide-camera::base', physicalDeviceId: 'wide-camera', role: 'wide', captureMode: 'physicalCamera', deviceZoomFactor: 1, displayZoom: '1×'},
+        {id: 'ultra-camera::base', physicalDeviceId: 'ultra-camera', role: 'ultraWide', captureMode: 'physicalCamera', deviceZoomFactor: 1, displayZoom: '0.5×'},
       ],
     });
-    const requested = cameraReducer(withLenses, {type: 'lensSelectionRequested', id: 'ultra-camera'});
+    const requested = cameraReducer(withLenses, {type: 'lensSelectionRequested', id: 'ultra-camera::base'});
     expect(requested.selectedLensId).toBeNull();
-    expect(requested.pendingLensId).toBe('ultra-camera');
-    const acknowledged = cameraReducer(requested, {type: 'activeLensChanged', id: 'ultra-camera'});
-    expect(acknowledged.selectedLensId).toBe('ultra-camera');
+    expect(requested.pendingLensId).toBe('ultra-camera::base');
+    const acknowledged = cameraReducer(requested, {type: 'activeLensChanged', id: 'ultra-camera::base'});
+    expect(acknowledged.selectedLensId).toBe('ultra-camera::base');
     expect(acknowledged.pendingLensId).toBeNull();
-    const retry = cameraReducer(acknowledged, {type: 'lensSelectionRequested', id: 'wide-camera'});
+    const retry = cameraReducer(acknowledged, {type: 'lensSelectionRequested', id: 'wide-camera::base'});
     const rejected = cameraReducer(retry, {
       type: 'lensSelectionFailed',
-      id: 'wide-camera',
+      id: 'wide-camera::base',
       code: 'lensSwitchFailed',
     });
     expect(rejected.pendingLensId).toBeNull();
-    expect(rejected.selectedLensId).toBe('ultra-camera');
+    expect(rejected.selectedLensId).toBe('ultra-camera::base');
   });
 
   it('applies capture metadata only after native success', () => {
@@ -81,6 +88,22 @@ describe('camera state and native boundary mapping', () => {
     expect(failed.lastError).toBe('sourcePersistenceFailed');
     expect(parseCaptureMetadata(JSON.stringify(captureOne))).toEqual(captureOne);
     expect(parseCaptureMetadata('{"sourceUri":"https://example.invalid/photo.jpg"}')).toBeNull();
+  });
+
+  it('retains a source-safe capture when a derived thumbnail is unavailable', () => {
+    const recoverable = {
+      ...captureOne,
+      thumbnailUri: null,
+      width: 0,
+      height: 0,
+      complete: false,
+      recoverableError: 'Metadata was reconstructed from the safe source.',
+    };
+    expect(parseCaptureMetadata(JSON.stringify(recoverable))).toEqual(recoverable);
+    const state = cameraReducer(initialCameraState, {type: 'captureCompleted', value: recoverable});
+    expect(state.lastCapture?.sourceSafe).toBe(true);
+    expect(state.lastCapture?.thumbnailUri).toBeNull();
+    expect(state.lastCapture?.complete).toBe(false);
   });
 
   it('clamps requested EV to the native device capability range', () => {

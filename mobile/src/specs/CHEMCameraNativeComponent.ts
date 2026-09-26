@@ -14,21 +14,41 @@ export type CameraLifecycleEvent = Readonly<{
 }>;
 
 export type LensesEvent = Readonly<{
-  lenses: {id: string; role: string; displayZoom: string}[];
+  lenses: {
+    id: string;
+    physicalDeviceId: string;
+    role: string;
+    captureMode: string;
+    deviceZoomFactor: CodegenTypes.Double;
+    displayZoom: string;
+  }[];
 }>;
 
 export type ActiveLensEvent = Readonly<{
   id: string;
+  physicalDeviceId: string;
+  role: string;
+  captureMode: string;
+  deviceZoomFactor: CodegenTypes.Double;
+  displayZoom: string;
 }>;
 
 export type CaptureCompletedEvent = Readonly<{
   id: string;
   sourceUri: string;
+  // Codegen's C++ event model represents strings as std::string; an empty value
+  // is normalized to null in the JavaScript camera domain layer.
   thumbnailUri: string;
   width: CodegenTypes.Int32;
   height: CodegenTypes.Int32;
   capturedAt: string;
   lensId: string;
+  physicalDeviceId: string;
+  captureMode: string;
+  deviceZoomFactor: CodegenTypes.Double;
+  sourceSafe: boolean;
+  complete: boolean;
+  recoverableError: string;
 }>;
 
 export type CaptureFailedEvent = Readonly<{
@@ -86,7 +106,7 @@ export interface NativeProps extends ViewProps {
 interface NativeCommands {
   start(viewRef: React.ElementRef<HostComponent<NativeProps>>): void;
   stop(viewRef: React.ElementRef<HostComponent<NativeProps>>): void;
-  selectLens(viewRef: React.ElementRef<HostComponent<NativeProps>>, deviceId: string): void;
+  selectLens(viewRef: React.ElementRef<HostComponent<NativeProps>>, captureModeId: string): void;
   focusAndExpose(
     viewRef: React.ElementRef<HostComponent<NativeProps>>,
     normalizedX: CodegenTypes.Float,

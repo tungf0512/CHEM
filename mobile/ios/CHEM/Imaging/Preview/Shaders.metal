@@ -11,7 +11,8 @@ struct PreviewUniforms {
   float2 sourceSize;
   uint orientation;
   uint ycbcrMatrix;
-  uint2 padding;
+  uint ycbcrRange;
+  uint padding;
 };
 
 struct PreviewVertexOut {
@@ -61,10 +62,18 @@ fragment float4 chemPreviewFragment(
   float y = lumaTexture.sample(videoSampler, in.textureCoordinate).r;
   float2 cbcr = chromaTexture.sample(videoSampler, in.textureCoordinate).rg;
 
-  // AVCaptureVideoDataOutput is configured for 8-bit video-range bi-planar 4:2:0.
-  float luma = (y - (16.0 / 255.0)) * (255.0 / 219.0);
-  float cb = (cbcr.x - (128.0 / 255.0)) * (255.0 / 224.0);
-  float cr = (cbcr.y - (128.0 / 255.0)) * (255.0 / 224.0);
+  float luma;
+  float cb;
+  float cr;
+  if (uniforms.ycbcrRange == 1) {
+    luma = y;
+    cb = cbcr.x - 0.5;
+    cr = cbcr.y - 0.5;
+  } else {
+    luma = (y - (16.0 / 255.0)) * (255.0 / 219.0);
+    cb = (cbcr.x - (128.0 / 255.0)) * (255.0 / 224.0);
+    cr = (cbcr.y - (128.0 / 255.0)) * (255.0 / 224.0);
+  }
   float3 rgb;
   if (uniforms.ycbcrMatrix == 1) {
     rgb = float3(

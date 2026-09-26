@@ -28,6 +28,7 @@ import {
   initialCameraState,
   mapAvailableLenses,
   parseCameraErrorCode,
+  parseCameraCaptureMode,
   parseCaptureMetadata,
   parsePermissionStatus,
   permissionPresentation,
@@ -145,7 +146,12 @@ export function useCameraController() {
       logCameraEvent('capture_completed', {captureId: capture.id, restored: 0});
       dispatch({
         type: 'captureCompleted',
-        value: {...capture, thumbnailUri: capture.thumbnailUri || null},
+        value: {
+          ...capture,
+          thumbnailUri: capture.thumbnailUri || null,
+          captureMode: parseCameraCaptureMode(capture.captureMode),
+          recoverableError: capture.recoverableError || null,
+        },
       });
     },
     [],

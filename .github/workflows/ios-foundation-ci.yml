@@ -1,0 +1,119 @@
+name: iOS foundation
+
+on:
+  push:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-foundation:
+    name: iOS native integration and domain tests
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Create CI log directory
+        working-directory: mobile
+        run: mkdir -p ci-logs
+
+      - name: Configure Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: mobile/.nvmrc
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install JavaScript dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Jest
+        working-directory: mobile
+        run: npm test -- --runInBand
+
+      - name: Lint
+        working-directory: mobile
+        run: npm run lint
+
+      - name: Generate iOS Codegen artifacts
+        working-directory: mobile
+        run: npm run codegen:ios
+
+      - name: Configure Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install locked Ruby dependencies
+        working-directory: mobile
+        run: |
+          set -o pipefail
+          bundle install --jobs 4 --retry 3 2>&1 | tee ci-logs/bundle-install.log
+
+      - name: Install CocoaPods dependencies
+        working-directory: mobile
+        run: |
+          set -o pipefail
+          bundle exec pod install --project-directory=ios 2>&1 | tee ci-logs/pod-install.log
+
+      - name: Verify workspace and scheme
+        working-directory: mobile
+        run: |
+          set -o pipefail
+          xcodebuild -list -workspace ios/CHEM.xcworkspace 2>&1 | tee ci-logs/xcode-list.log
+
+      - name: Build iOS Simulator target
+        working-directory: mobile
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/CHEM.xcworkspace \
+            -scheme CHEM \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee ci-logs/ios-simulator-build.log
+
+      - name: Run native domain tests
+        working-directory: mobile
+        run: |
+          set -o pipefail
+          swift test --package-path ios 2>&1 | tee ci-logs/native-domain-tests.log
+
+      - name: Preserve resolved CocoaPods lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-pod-lockfile-${{ github.run_id }}
+          if-no-files-found: warn
+          path: mobile/ios/Podfile.lock
+
+      - name: Preserve native logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-foundation-logs-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            mobile/ci-logs/
+            mobile/ios/Podfile.lock

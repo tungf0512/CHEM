@@ -62,6 +62,10 @@ Only the Camera Viewfinder is in this task. Film identity is a documented placeh
 
 The official CLI can create a bare iOS/Android host project on this Linux machine, and JavaScript tooling can be checked here once dependencies are installed. Native Swift/Metal compilation, CocoaPods integration, simulator launch, AVFoundation validation, and device tests require a macOS/Xcode toolchain and a physical iPhone where appropriate. Those results will be recorded as blocked by the current host, not as passed. No signing Team ID will be added.
 
+## Foundation hardening lens-discovery audit addendum
+
+The discovery boundary must not equate a user-visible zoom button with an `AVCaptureDevice`. The iPhone Air is the first physical validation target: its single 48 MP Fusion Main rear camera can offer both 1× Main and 2× sensor-crop capture modes. CHEM therefore identifies each physical sensor separately from each user-facing capture mode, and records both identities plus device-local zoom in capture metadata. Discovery can model physical Ultra Wide, Main, Main-sensor crop, and Telephoto combinations on other iPhones without a model-name branch. Virtual devices are omitted from the selector to avoid duplicate semantics; the deterministic mode policy is recorded in [ADR-007](DECISIONS/ADR-007-physical-camera-capture-modes.md). Actual iPhone Air capability discovery and crop behavior remain device-unverified.
+
 ## Resulting implementation layout
 
 The application is now bootstrapped under `mobile/`. The `App.tsx` entry launches the Camera viewfinder; reusable UI and camera state live under `src/design-system/` and `src/features/camera/`. React Native Codegen specs live in `src/specs/` (rather than `src/native/`) because Codegen requires the conventional `Native...` and `...NativeComponent` names and a single configured `jsSrcsDir`. No separate `src/app/`, `src/domain/`, or `src/native/` layer was needed for this single-screen milestone; camera domain state is localized in `camera.types.ts` and native contracts in the generated-spec source files.

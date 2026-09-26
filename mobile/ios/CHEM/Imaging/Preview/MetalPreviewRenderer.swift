@@ -15,7 +15,8 @@ private struct PreviewUniforms {
   var sourceSize: SIMD2<Float>
   var orientation: UInt32
   var ycbcrMatrix: UInt32
-  var padding: SIMD2<UInt32> = SIMD2(0, 0)
+  var ycbcrRange: UInt32
+  var padding: UInt32 = 0
 }
 
 /// Latest-frame-only native Metal renderer. Pixel buffers never cross into React Native.
@@ -25,7 +26,11 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
   private let textureCache: CVMetalTextureCache?
   private let pipelineState: MTLRenderPipelineState?
   private let vertices: MTLBuffer?
+  private let frameRatePolicy = PreviewFrameRatePolicy()
   private weak var view: MTKView?
+  private var thermalObserver: NSObjectProtocol?
+  private var captureDeviceMaximumFPS = 30
+  private let rendererCapacityFPS = 60
   private let frameLock = NSLock()
   private var latestPixelBuffer: CVPixelBuffer?
   private var orientationValue: UInt32 = 1
@@ -90,11 +95,20 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     }
 
     super.init()
+    thermalObserver = NotificationCenter.default.addObserver(
+      forName: ProcessInfo.thermalStateDidChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in self?.applyFrameRatePolicy() }
     if metalDevice == nil {
       storedFailureMessage = "This device does not expose a Metal rendering device."
     } else if commandQueue == nil || textureCache == nil || pipelineState == nil || vertices == nil {
       storedFailureMessage = "The neutral Metal preview pipeline could not be initialized."
     }
+  }
+
+  deinit {
+    if let thermalObserver { NotificationCenter.default.removeObserver(thermalObserver) }
   }
 
   public func attach(to view: MTKView?) {
@@ -108,12 +122,51 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     view.colorPixelFormat = .bgra8Unorm
     view.framebufferOnly = true
     view.autoResizeDrawable = true
-    view.preferredFramesPerSecond = 30
+    if let metalLayer = view.layer as? CAMetalLayer {
+      metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+    }
     view.enableSetNeedsDisplay = false
-    view.isPaused = failureMessage != nil
+    view.isPaused = !isActive || failureMessage != nil
     view.clearColor = MTLClearColor(red: 0.035, green: 0.04, blue: 0.05, alpha: 1)
     view.delegate = self
+    applyFrameRatePolicy()
     if let failureMessage { reportFailureOnce(failureMessage) }
+  }
+
+  private var isActive = false
+
+  public func setActive(_ active: Bool) {
+    isActive = active
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.view?.isPaused = !active || self.failureMessage != nil
+      self.applyFrameRatePolicy()
+    }
+  }
+
+  public func updateCaptureDeviceFrameRateLimit(_ maximumFPS: Int) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.captureDeviceMaximumFPS = maximumFPS
+      self.applyFrameRatePolicy()
+    }
+  }
+
+  private func applyFrameRatePolicy() {
+    let thermalLevel: PreviewThermalLevel
+    switch ProcessInfo.processInfo.thermalState {
+    case .nominal: thermalLevel = .nominal
+    case .fair: thermalLevel = .fair
+    case .serious: thermalLevel = .serious
+    case .critical: thermalLevel = .critical
+    case .unknown: thermalLevel = .unknown
+    @unknown default: thermalLevel = .unknown
+    }
+    view?.preferredFramesPerSecond = frameRatePolicy.targetFramesPerSecond(
+      thermalLevel: thermalLevel,
+      captureDeviceMaximumFramesPerSecond: captureDeviceMaximumFPS,
+      rendererCapacityFramesPerSecond: rendererCapacityFPS
+    )
   }
 
   public func setOrientation(_ orientation: Int) {
@@ -154,6 +207,11 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     let orientation = orientationValue
     let generation = latestGeneration
     frameLock.unlock()
+    guard let colorParameters = colorParameters(for: pixelBuffer) else {
+      reportFailureOnce("The camera preview received unsupported wide-gamut or HDR color metadata; the neutral SDR renderer did not apply an approximate transform.")
+      releaseRenderSlot()
+      return
+    }
     guard let descriptor = view.currentRenderPassDescriptor,
           let drawable = view.currentDrawable,
           let commandBuffer = commandQueue?.makeCommandBuffer(),
@@ -177,7 +235,8 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
       viewSize: SIMD2(Float(bounds.width), Float(bounds.height)),
       sourceSize: SIMD2(Float(CVPixelBufferGetWidth(pixelBuffer)), Float(CVPixelBufferGetHeight(pixelBuffer))),
       orientation: orientation,
-      ycbcrMatrix: isBT601(pixelBuffer) ? 1 : 0
+      ycbcrMatrix: colorParameters.matrix,
+      ycbcrRange: colorParameters.isFullRange ? 1 : 0
     )
     withUnsafePointer(to: &uniforms) { pointer in
       encoder.setVertexBytes(pointer, length: MemoryLayout<PreviewUniforms>.stride, index: 1)
@@ -234,11 +293,44 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     return (metalTexture, texture)
   }
 
-  private func isBT601(_ pixelBuffer: CVPixelBuffer) -> Bool {
-    guard let value = CVBufferGetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey, nil)?.takeUnretainedValue() else {
-      return false
+  private func colorParameters(for pixelBuffer: CVPixelBuffer) -> (matrix: UInt32, isFullRange: Bool)? {
+    let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
+    let isFullRange: Bool
+    if pixelFormat == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange {
+      isFullRange = false
+    } else if pixelFormat == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange {
+      isFullRange = true
+    } else {
+      return nil
     }
-    return CFEqual(value, kCVImageBufferYCbCrMatrix_ITU_R_601_4)
+
+    let matrixValue = CVBufferGetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey, nil)?.takeUnretainedValue()
+    let matrix: UInt32
+    if let matrixValue, CFEqual(matrixValue, kCVImageBufferYCbCrMatrix_ITU_R_601_4) {
+      matrix = 1
+    } else if let matrixValue,
+              CFEqual(matrixValue, kCVImageBufferYCbCrMatrix_ITU_R_709_2) {
+      matrix = 0
+    } else if matrixValue == nil {
+      // The capture device is explicitly fixed to SDR sRGB/Rec.709-compatible output.
+      matrix = 0
+    } else {
+      return nil
+    }
+
+    let transferValue = CVBufferGetAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey, nil)?.takeUnretainedValue()
+    if let transferValue,
+       !CFEqual(transferValue, kCVImageBufferTransferFunction_ITU_R_709_2),
+       !CFEqual(transferValue, kCVImageBufferTransferFunction_sRGB) {
+      return nil
+    }
+    let primariesValue = CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey, nil)?.takeUnretainedValue()
+    if let primariesValue,
+       !CFEqual(primariesValue, kCVImageBufferColorPrimaries_ITU_R_709_2),
+       !CFEqual(primariesValue, kCVImageBufferColorPrimaries_SMPTE_C) {
+      return nil
+    }
+    return (matrix, isFullRange)
   }
 
   private func reportFailureOnce(_ message: String) {

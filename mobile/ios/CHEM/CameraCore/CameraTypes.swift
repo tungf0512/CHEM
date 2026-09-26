@@ -1,26 +1,44 @@
 import Foundation
 
-public enum LensRole: String, Codable, CaseIterable {
+public enum LensRole: String, Codable, CaseIterable, Sendable {
   case ultraWide
   case wide
   case telephoto
-  case dualWide
-  case triple
 }
 
-public struct CameraLens: Codable, Equatable {
+public enum CameraCaptureMode: String, Codable, Sendable {
+  case physicalCamera
+  case mainSensorCrop
+}
+
+/// A user-selectable capture mode, not an assertion that each button is a separate sensor.
+public struct CameraLens: Codable, Equatable, Sendable {
   public let id: String
+  public let physicalDeviceID: String
   public let role: LensRole
+  public let captureMode: CameraCaptureMode
+  /// Zoom applied to this physical device. Calibration also keys on `physicalDeviceID` and mode.
+  public let deviceZoomFactor: Double
   public let displayZoom: String
 
-  public init(id: String, role: LensRole, displayZoom: String) {
+  public init(
+    id: String,
+    physicalDeviceID: String,
+    role: LensRole,
+    captureMode: CameraCaptureMode,
+    deviceZoomFactor: Double,
+    displayZoom: String
+  ) {
     self.id = id
+    self.physicalDeviceID = physicalDeviceID
     self.role = role
+    self.captureMode = captureMode
+    self.deviceZoomFactor = deviceZoomFactor
     self.displayZoom = displayZoom
   }
 }
 
-public enum CameraErrorCode: String, Codable {
+public enum CameraErrorCode: String, Codable, Sendable {
   case permissionDenied
   case sessionConfigurationFailed
   case cameraUnavailable
@@ -33,7 +51,7 @@ public enum CameraErrorCode: String, Codable {
   case interrupted
 }
 
-public struct CameraOperationFailure: Error {
+public struct CameraOperationFailure: Error, Sendable {
   public let code: CameraErrorCode
   public let message: String
 
@@ -43,7 +61,7 @@ public struct CameraOperationFailure: Error {
   }
 }
 
-public enum CameraLifecycleState: Hashable {
+public enum CameraLifecycleState: Hashable, Sendable {
   case idle
   case configuring
   case running
@@ -75,7 +93,7 @@ public struct CameraStateMachine {
   ]
 }
 
-public struct ExposureBiasRange: Equatable {
+public struct ExposureBiasRange: Equatable, Sendable {
   public let minimum: Float
   public let maximum: Float
 
@@ -92,7 +110,7 @@ public struct ExposureBiasRange: Equatable {
   }
 }
 
-public struct CaptureMetadata: Codable, Equatable {
+public struct CaptureMetadata: Codable, Equatable, Sendable {
   public let id: String
   public let sourceUri: String
   public let thumbnailUri: String?
@@ -100,6 +118,12 @@ public struct CaptureMetadata: Codable, Equatable {
   public let height: Int
   public let capturedAt: String
   public let lensId: String
+  public let physicalDeviceId: String
+  public let captureMode: CameraCaptureMode
+  public let deviceZoomFactor: Double
+  public let sourceSafe: Bool
+  public let complete: Bool
+  public let recoverableError: String?
 
   public init(
     id: String,
@@ -108,7 +132,13 @@ public struct CaptureMetadata: Codable, Equatable {
     width: Int,
     height: Int,
     capturedAt: String,
-    lensId: String
+    lensId: String,
+    physicalDeviceId: String,
+    captureMode: CameraCaptureMode,
+    deviceZoomFactor: Double,
+    sourceSafe: Bool = true,
+    complete: Bool = true,
+    recoverableError: String? = nil
   ) {
     self.id = id
     self.sourceUri = sourceUri
@@ -117,5 +147,11 @@ public struct CaptureMetadata: Codable, Equatable {
     self.height = height
     self.capturedAt = capturedAt
     self.lensId = lensId
+    self.physicalDeviceId = physicalDeviceId
+    self.captureMode = captureMode
+    self.deviceZoomFactor = deviceZoomFactor
+    self.sourceSafe = sourceSafe
+    self.complete = complete
+    self.recoverableError = recoverableError
   }
 }

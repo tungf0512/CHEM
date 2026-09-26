@@ -25,17 +25,24 @@ export type CameraLifecycle =
   | {type: 'interrupted'; reason: string}
   | {type: 'failed'; code: CameraErrorCode};
 
-export type LensRole = 'ultraWide' | 'wide' | 'telephoto' | 'dualWide' | 'triple';
+export type LensRole = 'ultraWide' | 'wide' | 'telephoto';
+export type CameraCaptureMode = 'physicalCamera' | 'mainSensorCrop';
 
 export type CameraLens = {
   id: string;
+  physicalDeviceId: string;
   role: LensRole;
+  captureMode: CameraCaptureMode;
+  deviceZoomFactor: number;
   displayZoom: string;
 };
 
 export type NativeLensPayload = {
   id: string;
+  physicalDeviceId: string;
   role: string;
+  captureMode: string;
+  deviceZoomFactor: number;
   displayZoom: string;
 };
 
@@ -47,6 +54,12 @@ export type CaptureMetadata = {
   height: number;
   capturedAt: string;
   lensId: string;
+  physicalDeviceId: string;
+  captureMode: CameraCaptureMode;
+  deviceZoomFactor: number;
+  sourceSafe: boolean;
+  complete: boolean;
+  recoverableError: string | null;
 };
 
 export type CameraTelemetry = {
@@ -169,14 +182,29 @@ export function parseCaptureMetadata(raw: string): CaptureMetadata | null {
       return null;
     }
     const capture = value as Partial<CaptureMetadata>;
+    const width = typeof capture.width === 'number' && Number.isFinite(capture.width)
+      ? capture.width
+      : -1;
+    const height = typeof capture.height === 'number' && Number.isFinite(capture.height)
+      ? capture.height
+      : -1;
+    const sourceSafe = capture.sourceSafe !== false;
+    const complete = capture.complete !== false;
+    const captureMode = capture.captureMode === 'mainSensorCrop'
+      ? 'mainSensorCrop'
+      : 'physicalCamera';
+    const deviceZoomFactor = typeof capture.deviceZoomFactor === 'number' &&
+      Number.isFinite(capture.deviceZoomFactor) && capture.deviceZoomFactor > 0
+      ? capture.deviceZoomFactor
+      : 1;
     if (
       typeof capture.id !== 'string' ||
       typeof capture.sourceUri !== 'string' ||
       !capture.sourceUri.startsWith('file://') ||
-      typeof capture.width !== 'number' || !Number.isFinite(capture.width) || capture.width <= 0 ||
-      typeof capture.height !== 'number' || !Number.isFinite(capture.height) || capture.height <= 0 ||
+      width < 0 || height < 0 || (complete && (width === 0 || height === 0)) ||
       typeof capture.capturedAt !== 'string' ||
-      typeof capture.lensId !== 'string'
+      typeof capture.lensId !== 'string' ||
+      !sourceSafe
     ) {
       return null;
     }
@@ -186,10 +214,18 @@ export function parseCaptureMetadata(raw: string): CaptureMetadata | null {
       thumbnailUri: typeof capture.thumbnailUri === 'string' && capture.thumbnailUri.length > 0
         ? capture.thumbnailUri
         : null,
-      width: capture.width,
-      height: capture.height,
+      width,
+      height,
       capturedAt: capture.capturedAt,
       lensId: capture.lensId,
+      physicalDeviceId: typeof capture.physicalDeviceId === 'string' ? capture.physicalDeviceId : '',
+      captureMode,
+      deviceZoomFactor,
+      sourceSafe,
+      complete,
+      recoverableError: typeof capture.recoverableError === 'string' && capture.recoverableError.length > 0
+        ? capture.recoverableError
+        : null,
     };
   } catch {
     return null;
@@ -225,16 +261,54 @@ export function permissionPresentation(
 }
 
 export function mapAvailableLenses(lenses: NativeLensPayload[]): CameraLens[] {
-  return lenses.map(lens => ({
-    id: lens.id,
-    role: isLensRole(lens.role) ? lens.role : 'wide',
-    displayZoom: lens.displayZoom,
-  }));
+  const mapped = lenses.flatMap(lens => {
+    if (
+      !lens.id || !lens.physicalDeviceId || !lens.displayZoom ||
+      !Number.isFinite(lens.deviceZoomFactor) || lens.deviceZoomFactor <= 0 ||
+      !isCaptureMode(lens.captureMode)
+    ) {
+      return [];
+    }
+    return [{
+      id: lens.id,
+      physicalDeviceId: lens.physicalDeviceId,
+      role: isLensRole(lens.role) ? lens.role : 'wide',
+      captureMode: lens.captureMode,
+      deviceZoomFactor: lens.deviceZoomFactor,
+      displayZoom: lens.displayZoom,
+    }];
+  });
+  mapped.sort((left, right) =>
+    zoomValue(left.displayZoom) - zoomValue(right.displayZoom) ||
+    left.physicalDeviceId.localeCompare(right.physicalDeviceId) ||
+    left.id.localeCompare(right.id),
+  );
+  const seenModes = new Set<string>();
+  return mapped.filter(lens => {
+    const semanticButton = lens.displayZoom;
+    if (seenModes.has(semanticButton)) {
+      return false;
+    }
+    seenModes.add(semanticButton);
+    return true;
+  });
 }
 
 function isLensRole(value: string): value is LensRole {
-  return value === 'ultraWide' || value === 'wide' || value === 'telephoto' ||
-    value === 'dualWide' || value === 'triple';
+  return value === 'ultraWide' || value === 'wide' || value === 'telephoto';
+}
+
+function isCaptureMode(value: string): value is CameraCaptureMode {
+  return value === 'physicalCamera' || value === 'mainSensorCrop';
+}
+
+export function parseCameraCaptureMode(value: string): CameraCaptureMode {
+  return isCaptureMode(value) ? value : 'physicalCamera';
+}
+
+function zoomValue(label: string): number {
+  const parsed = Number(label.replace('×', ''));
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
 }
 
 export function cameraReducer(

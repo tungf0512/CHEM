@@ -14,7 +14,7 @@ public final class PhotoCaptureCoordinator {
 
   public func capture(
     using output: AVCapturePhotoOutput,
-    lensID: String,
+    lens: CameraLens,
     completion: @escaping (Result<CaptureMetadata, CameraOperationFailure>) -> Void
   ) {
     let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
@@ -24,7 +24,7 @@ public final class PhotoCaptureCoordinator {
     let request = PhotoCaptureRequest(
       store: store,
       captureID: captureID,
-      lensID: lensID,
+      lens: lens,
       completion: completion,
       onFinished: { [weak self] in self?.removeRequest(requestID) }
     )
@@ -44,7 +44,7 @@ public final class PhotoCaptureCoordinator {
 private final class PhotoCaptureRequest: NSObject, AVCapturePhotoCaptureDelegate {
   private let store: CaptureStoring
   private let captureID: String
-  private let lensID: String
+  private let lens: CameraLens
   private let completion: (Result<CaptureMetadata, CameraOperationFailure>) -> Void
   private let onFinished: () -> Void
   private let stateLock = NSLock()
@@ -53,13 +53,13 @@ private final class PhotoCaptureRequest: NSObject, AVCapturePhotoCaptureDelegate
   init(
     store: CaptureStoring,
     captureID: String,
-    lensID: String,
+    lens: CameraLens,
     completion: @escaping (Result<CaptureMetadata, CameraOperationFailure>) -> Void,
     onFinished: @escaping () -> Void
   ) {
     self.store = store
     self.captureID = captureID
-    self.lensID = lensID
+    self.lens = lens
     self.completion = completion
     self.onFinished = onFinished
   }
@@ -102,7 +102,7 @@ private final class PhotoCaptureRequest: NSObject, AVCapturePhotoCaptureDelegate
         width: width,
         height: height,
         capturedAt: ISO8601DateFormatter().string(from: Date()),
-        lensID: lensID,
+        lens: lens,
         prepareThumbnail: { sourceURL in
           guard let durableSource = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
                 let thumbnailData = Self.makeThumbnail(from: durableSource) else {
@@ -115,13 +115,10 @@ private final class PhotoCaptureRequest: NSObject, AVCapturePhotoCaptureDelegate
       )
       complete(.success(metadata))
     } catch let failure as CaptureStoreError {
-      let code: CameraErrorCode
-      if case .thumbnailPreparationFailed = failure {
-        code = .captureFailed
-      } else {
-        code = .sourcePersistenceFailed
-      }
-      complete(.failure(CameraOperationFailure(code: code, message: failure.localizedDescription ?? "The photo could not be saved.")))
+      complete(.failure(CameraOperationFailure(
+        code: .sourcePersistenceFailed,
+        message: failure.localizedDescription
+      )))
     } catch {
       complete(.failure(CameraOperationFailure(
         code: .sourcePersistenceFailed,

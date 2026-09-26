@@ -61,9 +61,9 @@ using namespace facebook::react;
   [_previewView setPreviewActive:NO];
 }
 
-- (void)selectLens:(NSString *)deviceId
+- (void)selectLens:(NSString *)captureModeId
 {
-  [_previewView.cameraEngine selectLensWithId:deviceId];
+  [_previewView.cameraEngine selectLensWithId:captureModeId];
 }
 
 - (void)focusAndExpose:(float)normalizedX normalizedY:(float)normalizedY
@@ -94,7 +94,7 @@ using namespace facebook::react;
   eventEmitter->onCameraStateChanged(event);
 }
 
-- (void)cameraEngineDidChangeLenses:(NSArray<NSDictionary<NSString *, NSString *> *> *)lenses
+- (void)cameraEngineDidChangeLenses:(NSArray<NSDictionary<NSString *, id> *> *)lenses
 {
   auto eventEmitter = std::static_pointer_cast<const CHEMCameraPreviewEventEmitter>(_eventEmitter);
   if (!eventEmitter) return;
@@ -102,19 +102,27 @@ using namespace facebook::react;
   for (NSDictionary<NSString *, NSString *> *lens in lenses) {
     CHEMCameraPreviewEventEmitter::OnAvailableLensesChangedLenses value;
     value.id = [lens[@"id"] UTF8String] ?: "";
+    value.physicalDeviceId = [lens[@"physicalDeviceId"] UTF8String] ?: "";
     value.role = [lens[@"role"] UTF8String] ?: "wide";
+    value.captureMode = [lens[@"captureMode"] UTF8String] ?: "physicalCamera";
+    value.deviceZoomFactor = [lens[@"deviceZoomFactor"] doubleValue];
     value.displayZoom = [lens[@"displayZoom"] UTF8String] ?: "OPTICAL";
     event.lenses.push_back(value);
   }
   eventEmitter->onAvailableLensesChanged(event);
 }
 
-- (void)cameraEngineDidActivateLens:(NSDictionary<NSString *, NSString *> *)lens
+- (void)cameraEngineDidActivateLens:(NSDictionary<NSString *, id> *)lens
 {
   auto eventEmitter = std::static_pointer_cast<const CHEMCameraPreviewEventEmitter>(_eventEmitter);
   if (!eventEmitter) return;
   CHEMCameraPreviewEventEmitter::OnActiveLensChanged event;
   event.id = [lens[@"id"] UTF8String] ?: "";
+  event.physicalDeviceId = [lens[@"physicalDeviceId"] UTF8String] ?: "";
+  event.role = [lens[@"role"] UTF8String] ?: "wide";
+  event.captureMode = [lens[@"captureMode"] UTF8String] ?: "physicalCamera";
+  event.deviceZoomFactor = [lens[@"deviceZoomFactor"] doubleValue];
+  event.displayZoom = [lens[@"displayZoom"] UTF8String] ?: "OPTICAL";
   eventEmitter->onActiveLensChanged(event);
 }
 
@@ -193,11 +201,27 @@ using namespace facebook::react;
   CHEMCameraPreviewEventEmitter::OnCaptureCompleted event;
   event.id = [metadata[@"id"] UTF8String] ?: "";
   event.sourceUri = [metadata[@"sourceUri"] UTF8String] ?: "";
-  event.thumbnailUri = [metadata[@"thumbnailUri"] UTF8String] ?: "";
+  id thumbnailURI = metadata[@"thumbnailUri"];
+  if ([thumbnailURI isKindOfClass:[NSString class]]) {
+    event.thumbnailUri = [(NSString *)thumbnailURI UTF8String] ?: "";
+  } else {
+    event.thumbnailUri = "";
+  }
   event.width = [metadata[@"width"] intValue];
   event.height = [metadata[@"height"] intValue];
   event.capturedAt = [metadata[@"capturedAt"] UTF8String] ?: "";
   event.lensId = [metadata[@"lensId"] UTF8String] ?: "";
+  event.physicalDeviceId = [metadata[@"physicalDeviceId"] UTF8String] ?: "";
+  event.captureMode = [metadata[@"captureMode"] UTF8String] ?: "physicalCamera";
+  event.deviceZoomFactor = [metadata[@"deviceZoomFactor"] doubleValue];
+  event.sourceSafe = [metadata[@"sourceSafe"] boolValue];
+  event.complete = [metadata[@"complete"] boolValue];
+  id recoverableError = metadata[@"recoverableError"];
+  if ([recoverableError isKindOfClass:[NSString class]]) {
+    event.recoverableError = [(NSString *)recoverableError UTF8String] ?: "";
+  } else {
+    event.recoverableError = "";
+  }
   eventEmitter->onCaptureCompleted(event);
 }
 
