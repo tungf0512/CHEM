@@ -69,12 +69,21 @@ jobs:
           working-directory: mobile
           bundler: "2.7.2"
 
+      - name: Regenerate lock metadata with selected Bundler
+        id: bundle_lock
+        working-directory: mobile
+        run: |
+          set -o pipefail
+          bundle _2.7.2_ lock --bundler 2.7.2 2>&1 | tee ci-logs/bundle-lock.log
+          locked_bundler="$(awk '/^BUNDLED WITH$/{getline; gsub(/^[[:space:]]+/, ""); print; exit}' Gemfile.lock)"
+          test "$locked_bundler" = "2.7.2"
+
       - name: Install locked Ruby dependencies
         id: bundle_install
         working-directory: mobile
         run: |
           set +e
-          bundle install --jobs 4 --retry 3 --verbose 2>&1 | tee ci-logs/bundle-install.log
+          bundle _2.7.2_ install --jobs 4 --retry 3 --verbose 2>&1 | tee ci-logs/bundle-install.log
           bundle_status=${PIPESTATUS[0]}
           set -e
           exit "$bundle_status"
@@ -82,7 +91,7 @@ jobs:
       - name: Install CocoaPods dependencies
         id: pods
         working-directory: mobile
-        run: bundle exec pod install --project-directory=ios 2>&1 | tee ci-logs/pod-install.log
+        run: bundle _2.7.2_ exec pod install --project-directory=ios 2>&1 | tee ci-logs/pod-install.log
 
       - name: Verify resolved CocoaPods lockfile
         id: pod_lock
@@ -140,6 +149,7 @@ jobs:
           JEST_OUTCOME: ${{ steps.jest.outcome }}
           LINT_OUTCOME: ${{ steps.lint.outcome }}
           CODEGEN_OUTCOME: ${{ steps.codegen.outcome }}
+          BUNDLE_LOCK_OUTCOME: ${{ steps.bundle_lock.outcome }}
           BUNDLE_OUTCOME: ${{ steps.bundle_install.outcome }}
           PODS_OUTCOME: ${{ steps.pods.outcome }}
           XCODE_LIST_OUTCOME: ${{ steps.xcode_list.outcome }}
@@ -148,7 +158,7 @@ jobs:
         run: |
           ruby_version="$(ruby --version 2>&1 || true)"
           bundler_version="$(bundle --version 2>&1 || true)"
-          cocoapods_version="$(bundle exec pod --version 2>&1 || true)"
+          cocoapods_version="$(bundle _2.7.2_ exec pod --version 2>&1 || true)"
           xcode_version="$(xcodebuild -version 2>&1 | tr '\n' ' ' || true)"
           react_native_version="$(node -p 'require("react-native/package.json").version' 2>&1 || true)"
           lock_bundler_version="$(awk '/^BUNDLED WITH$/{getline; gsub(/^[[:space:]]+/, ""); print; exit}' Gemfile.lock 2>/dev/null || true)"
@@ -169,12 +179,12 @@ jobs:
             echo
             echo "### Step outcomes"
             printf -- '- npm ci: `%s`; typecheck: `%s`; Jest: `%s`; lint: `%s`; Codegen: `%s`\n' "$NPM_CI_OUTCOME" "$TYPECHECK_OUTCOME" "$JEST_OUTCOME" "$LINT_OUTCOME" "$CODEGEN_OUTCOME"
-            printf -- '- Bundler: `%s`; CocoaPods: `%s`; workspace/scheme: `%s`; simulator build: `%s`; native tests: `%s`\n' "$BUNDLE_OUTCOME" "$PODS_OUTCOME" "$XCODE_LIST_OUTCOME" "$IOS_BUILD_OUTCOME" "$NATIVE_TESTS_OUTCOME"
+            printf -- '- Bundler lock refresh: `%s`; Bundler install: `%s`; CocoaPods: `%s`; workspace/scheme: `%s`; simulator build: `%s`; native tests: `%s`\n' "$BUNDLE_LOCK_OUTCOME" "$BUNDLE_OUTCOME" "$PODS_OUTCOME" "$XCODE_LIST_OUTCOME" "$IOS_BUILD_OUTCOME" "$NATIVE_TESTS_OUTCOME"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$JOB_STATUS" != "success" ]; then
-            for log_file in ci-logs/npm-ci.log ci-logs/typecheck.log ci-logs/jest.log ci-logs/lint.log ci-logs/codegen.log ci-logs/bundle-install.log ci-logs/pod-install.log ci-logs/xcode-list.log ci-logs/ios-simulator-build.log ci-logs/native-domain-tests.log; do
+            for log_file in ci-logs/npm-ci.log ci-logs/typecheck.log ci-logs/jest.log ci-logs/lint.log ci-logs/codegen.log ci-logs/bundle-lock.log ci-logs/bundle-install.log ci-logs/pod-install.log ci-logs/xcode-list.log ci-logs/ios-simulator-build.log ci-logs/native-domain-tests.log; do
               if [ -s "$log_file" ]; then
                 excerpt="$(tail -n 45 "$log_file" | tr '\r\n' ' ' | cut -c 1-3000)"
                 {

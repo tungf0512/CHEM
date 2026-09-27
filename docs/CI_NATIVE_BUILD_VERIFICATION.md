@@ -14,24 +14,25 @@ The concrete reproducibility defect found in source is a mismatched, under-speci
 
 ## Dependency decision
 
-| Tool | Selected version | Decision |
-|---|---:|---|
-| Ruby | `3.4.11` | Exact current patch from the maintained Ruby 3.4 line; checked into `mobile/.ruby-version`, read by `Gemfile`, and selected by `ruby/setup-ruby` from `mobile/`. |
-| Bundler | `2.7.2` | Explicitly selected by `ruby/setup-ruby`; compatible with Ruby 3.4 and newer than the stale 2.2.22 lock metadata. `bundle install` owns any lockfile metadata rewrite. |
-| CocoaPods | `1.15.2` | Kept at the already-resolved foundation version to avoid mixing a project-parser upgrade into the CI repair. The existing `xcodeproj` and ActiveSupport compatibility constraints remain. |
-| Node | `20.19.6` | Read from the existing `mobile/.nvmrc`; the Node 20 GitHub Action runtime warning is addressed by upgrading the Actions themselves, not the app's Node version. |
-| React Native | `0.86.3` | Existing application version; New Architecture, Fabric, TurboModule, and Codegen remain enabled. |
+| Tool         | Selected version | Decision                                                                                                                                                                                  |
+| ------------ | ---------------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ruby         |         `3.4.11` | Exact current patch from the maintained Ruby 3.4 line; checked into `mobile/.ruby-version`, read by `Gemfile`, and selected by `ruby/setup-ruby` from `mobile/`.                          |
+| Bundler      |          `2.7.2` | Explicitly selected by `ruby/setup-ruby`; CI invokes this version directly to regenerate lock metadata before dependency installation, avoiding auto-restart into the stale `2.2.22` lock version. |
+| CocoaPods    |         `1.15.2` | Kept at the already-resolved foundation version to avoid mixing a project-parser upgrade into the CI repair. The existing `xcodeproj` and ActiveSupport compatibility constraints remain. |
+| Node         |        `20.19.6` | Read from the existing `mobile/.nvmrc`; the Node 20 GitHub Action runtime warning is addressed by upgrading the Actions themselves, not the app's Node version.                           |
+| React Native |         `0.86.3` | Existing application version; New Architecture, Fabric, TurboModule, and Codegen remain enabled.                                                                                          |
 
 ## Iterations
 
-| Run ID | Commit | Result / last stage | Root cause and fix |
-|---|---|---|---|
-| `36265627280` | `f5ee7c1` | Failed at locked Ruby dependency installation (exit 5). Earlier JS and Codegen stages passed; native stages did not run. | Exact Bundler stderr is blocked by GitHub's admin-only log/archive endpoint. Source audit found Ruby/Bundler drift; this task pins Ruby/Bundler and adds public failure-summary output. |
-| Pending | Pending | Pending macOS runner evidence. | To be filled from the actual Actions run; do not infer build/test success from source or local Linux checks. |
+| Run ID        | Commit    | Result / last stage                                                                                                                                   | Root cause and fix                                                                                                                                                                                                                                                                                                                                             |
+| ------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `36265627280` | `f5ee7c1` | Failed at locked Ruby dependency installation (exit 5). Earlier JS and Codegen stages passed; native stages did not run.                              | Exact Bundler stderr is blocked by GitHub's admin-only log/archive endpoint. Source audit found Ruby/Bundler drift; this task pins Ruby/Bundler and adds public failure-summary output.                                                                                                                                                                        |
+| `36292015554` | `8b25348` | Failed at locked Ruby dependency installation; JS, TypeScript, Jest, lint, Codegen, and Ruby setup passed. CocoaPods/Xcode/native tests were skipped. | Public check annotations exposed the exact failure: Bundler `2.7.2` auto-installed and re-executed the lockfile's Bundler `2.2.22`; that version crashed under Ruby `3.4.11` at `DidYouMean::SPELL_CHECKERS`. The workflow now invokes Bundler `2.7.2` directly to regenerate lock metadata before install, then explicitly uses it for install and CocoaPods. |
+| Pending       | Pending   | Pending macOS runner evidence.                                                                                                                        | Follow the actual Actions run through CocoaPods, workspace/scheme validation, simulator compilation, and Swift tests. Do not infer success from source or local Linux checks.                                                                                                                                                                                  |
 
 ## Final evidence
 
-Pending a real macOS Actions run. Required evidence to record here:
+Pending a full green macOS Actions run. Required evidence to record here:
 
 - GitHub Actions run URL, ID, commit, and conclusion.
 - `bundle install` / CocoaPods versions and result.
@@ -51,4 +52,4 @@ gh run download <GREEN_RUN_ID> \
   --dir /tmp/chem-ios-lockfiles
 ```
 
-Then copy the artifact's `mobile/Gemfile.lock` and `mobile/ios/Podfile.lock` into the corresponding repository paths and commit the generated files. Do not commit `Pods/`.
+The artifact's common path root is `mobile/`, so the downloaded files are `Gemfile.lock` and `ios/Podfile.lock` inside `/tmp/chem-ios-lockfiles`. Copy them to `mobile/Gemfile.lock` and `mobile/ios/Podfile.lock`, respectively, then commit the generated files. Do not commit `Pods/`.
