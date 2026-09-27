@@ -101,7 +101,19 @@ jobs:
           test -s mobile/Gemfile.lock
           test -s mobile/ios/Podfile.lock
           git diff --check
-          unexpected="$(git status --short | awk '{print $2}' | grep -Ev '^(mobile/Gemfile\.lock|mobile/ios/Podfile\.lock)$' || true)"
+          status_dump="$(git status --short)"
+          unexpected="$(printf '%s\n' "$status_dump" | awk '{print $2}' | grep -Ev '^(mobile/Gemfile\.lock|mobile/ios/Podfile\.lock)$' || true)"
+          if [ -n "$unexpected" ]; then
+            {
+              echo "## Unexpected generated changes"
+              echo
+              echo '```text'
+              printf '%s\n' "$status_dump"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            escaped_status="$(printf '%s' "$status_dump" | tr '\r\n' ' ' | sed 's/%/%25/g')"
+            printf '::error title=Unexpected generated changes::%s\n' "$escaped_status"
+          fi
           test -z "$unexpected"
 
       - name: Commit and push canonical lockfiles
