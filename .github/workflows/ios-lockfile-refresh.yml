@@ -55,7 +55,41 @@ jobs:
 
       - name: Resolve CocoaPods dependencies
         working-directory: mobile
-        run: bundle _2.7.2_ exec pod install --project-directory=ios
+        run: |
+          set +e
+          bundle _2.7.2_ exec pod install --project-directory=ios 2>&1 | tee ci-pod-install.log
+          pod_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$pod_status" -ne 0 ]; then
+            {
+              echo "## CocoaPods failure tail"
+              echo
+              echo '```text'
+              tail -n 120 ci-pod-install.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$pod_status"
+
+      - name: Preserve resolver diagnostics
+        if: always()
+        working-directory: mobile
+        run: |
+          {
+            echo "## Lockfile resolver diagnostics"
+            echo
+            ruby --version
+            bundle _2.7.2_ --version
+            bundle _2.7.2_ exec pod --version
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload resolver diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-lockfile-refresh-logs-${{ github.run_id }}
+          if-no-files-found: warn
+          path: mobile/ci-pod-install.log
 
       - name: Validate generated lockfile scope
         run: |
