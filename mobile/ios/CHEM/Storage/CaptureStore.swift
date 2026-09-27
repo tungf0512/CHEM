@@ -33,7 +33,7 @@ public enum CaptureStoreError: Error, LocalizedError {
   }
 }
 
-#if DEBUG
+#if DEBUG || CHEM_INTERNAL_VALIDATION
 public enum CaptureStoreFailurePoint: Equatable {
   case thumbnailGeneration
   case metadataWrite
@@ -95,7 +95,7 @@ public final class CaptureStore: NSObject, CaptureStoring {
   private let rootURL: URL?
   private let queue = DispatchQueue(label: "chem.capture-store", qos: .utility)
   private let fileManager: FileManager
-  #if DEBUG
+  #if DEBUG || CHEM_INTERNAL_VALIDATION
   public var debugFailurePoint: CaptureStoreFailurePoint?
   #endif
 
@@ -107,6 +107,29 @@ public final class CaptureStore: NSObject, CaptureStoring {
 
   @objc public class func latestMetadataJSON() -> String {
     sharedStore.latestMetadataJSONValue
+  }
+
+  /// Enables only the named deterministic fault in an internal validation build.
+  /// Production/TestFlight builds without CHEM_INTERNAL_VALIDATION cannot enable it.
+  @objc public class func setInternalValidationFailurePoint(_ value: String) -> Bool {
+    #if DEBUG || CHEM_INTERNAL_VALIDATION
+    guard CHEMValidationDiagnostics.isInternalValidationEnabled() else { return false }
+    let point: CaptureStoreFailurePoint?
+    switch value {
+    case "none": point = nil
+    case "thumbnail": point = .thumbnailGeneration
+    case "metadata": point = .metadataWrite
+    case "latestPointer": point = .latestPointerWrite
+    default: return false
+    }
+    #if DEBUG || CHEM_INTERNAL_VALIDATION
+    sharedStore.debugFailurePoint = point
+    #endif
+    CHEMValidationDiagnostics.setFaultInjection(value)
+    return true
+    #else
+    return false
+    #endif
   }
 
   /// Queries by validating/recovering on-disk records; `latest.json` is only an index hint.
@@ -191,7 +214,7 @@ public final class CaptureStore: NSObject, CaptureStoring {
       var thumbnailUri: String?
       var derivedError: String?
       do {
-        #if DEBUG
+        #if DEBUG || CHEM_INTERNAL_VALIDATION
         if debugFailurePoint == .thumbnailGeneration {
           throw CaptureStoreError.thumbnailPreparationFailed("Debug injection: thumbnail generation failed.")
         }
@@ -225,7 +248,7 @@ public final class CaptureStore: NSObject, CaptureStoring {
 
       var metadataPersisted = false
       do {
-        #if DEBUG
+        #if DEBUG || CHEM_INTERNAL_VALIDATION
         if debugFailurePoint == .metadataWrite {
           throw CaptureStoreError.writeFailed("Debug injection: metadata write failed.")
         }
@@ -269,7 +292,7 @@ public final class CaptureStore: NSObject, CaptureStoring {
       }
 
       do {
-        #if DEBUG
+        #if DEBUG || CHEM_INTERNAL_VALIDATION
         if debugFailurePoint == .latestPointerWrite {
           throw CaptureStoreError.writeFailed("Debug injection: latest pointer write failed.")
         }

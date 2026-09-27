@@ -6,6 +6,15 @@ public enum CameraOrientation: Int, CaseIterable, Codable, Sendable {
   case portraitUpsideDown = 2
   case landscapeLeft = 3
   case landscapeRight = 4
+
+  public var orientationName: String {
+    switch self {
+    case .portrait: return "portrait"
+    case .portraitUpsideDown: return "portraitUpsideDown"
+    case .landscapeLeft: return "landscapeLeft"
+    case .landscapeRight: return "landscapeRight"
+    }
+  }
 }
 
 public struct CameraPreviewGeometry: Equatable, Sendable {

@@ -45,6 +45,13 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
   private var metricTotalGPUTime = 0.0
   private var metricCameraState = "idle"
   private var metricActiveLens = ""
+  private var metricConfiguredFPS = 0
+  private var metricSourceWidth = 0
+  private var metricSourceHeight = 0
+  private var metricColorMatrix = "BT.709"
+  private var metricColorPrimaries = "sRGB"
+  private var metricTransferFunction = "sRGB"
+  private var metricColorRange = "video"
 
   private var storedFailureMessage: String?
   public var failureMessage: String? {
@@ -162,11 +169,17 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     case .unknown: thermalLevel = .unknown
     @unknown default: thermalLevel = .unknown
     }
-    view?.preferredFramesPerSecond = frameRatePolicy.targetFramesPerSecond(
+    let targetFPS = frameRatePolicy.targetFramesPerSecond(
       thermalLevel: thermalLevel,
       captureDeviceMaximumFramesPerSecond: captureDeviceMaximumFPS,
       rendererCapacityFramesPerSecond: rendererCapacityFPS
     )
+    view?.preferredFramesPerSecond = targetFPS
+    #if DEBUG || CHEM_INTERNAL_VALIDATION
+    frameLock.lock()
+    metricConfiguredFPS = targetFPS
+    frameLock.unlock()
+    #endif
   }
 
   public func setOrientation(_ orientation: Int) {
@@ -177,7 +190,7 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
 
   public func enqueue(_ pixelBuffer: CVPixelBuffer) {
     frameLock.lock()
-    #if DEBUG
+    #if DEBUG || CHEM_INTERNAL_VALIDATION
     if latestGeneration > lastSubmittedGeneration {
       metricDroppedFrames += 1
     }
@@ -212,6 +225,16 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
       releaseRenderSlot()
       return
     }
+    #if DEBUG || CHEM_INTERNAL_VALIDATION
+    frameLock.lock()
+    metricSourceWidth = CVPixelBufferGetWidth(pixelBuffer)
+    metricSourceHeight = CVPixelBufferGetHeight(pixelBuffer)
+    metricColorMatrix = colorParameters.matrixName
+    metricColorPrimaries = colorParameters.primaries
+    metricTransferFunction = colorParameters.transferFunction
+    metricColorRange = colorParameters.isFullRange ? "full" : "video"
+    frameLock.unlock()
+    #endif
     guard let descriptor = view.currentRenderPassDescriptor,
           let drawable = view.currentDrawable,
           let commandBuffer = commandQueue?.makeCommandBuffer(),
@@ -293,7 +316,13 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     return (metalTexture, texture)
   }
 
-  private func colorParameters(for pixelBuffer: CVPixelBuffer) -> (matrix: UInt32, isFullRange: Bool)? {
+  private func colorParameters(for pixelBuffer: CVPixelBuffer) -> (
+    matrix: UInt32,
+    isFullRange: Bool,
+    matrixName: String,
+    primaries: String,
+    transferFunction: String
+  )? {
     let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
     let isFullRange: Bool
     if pixelFormat == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange {
@@ -306,31 +335,45 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
 
     let matrixValue = CVBufferGetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey, nil)?.takeUnretainedValue()
     let matrix: UInt32
+    let matrixName: String
     if let matrixValue, CFEqual(matrixValue, kCVImageBufferYCbCrMatrix_ITU_R_601_4) {
       matrix = 1
+      matrixName = "BT.601"
     } else if let matrixValue,
               CFEqual(matrixValue, kCVImageBufferYCbCrMatrix_ITU_R_709_2) {
       matrix = 0
+      matrixName = "BT.709"
     } else if matrixValue == nil {
       // The capture device is explicitly fixed to SDR sRGB/Rec.709-compatible output.
       matrix = 0
+      matrixName = "BT.709"
     } else {
       return nil
     }
 
     let transferValue = CVBufferGetAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey, nil)?.takeUnretainedValue()
+    let transferFunction: String
     if let transferValue,
        !CFEqual(transferValue, kCVImageBufferTransferFunction_ITU_R_709_2),
        !CFEqual(transferValue, kCVImageBufferTransferFunction_sRGB) {
       return nil
+    } else if let transferValue, CFEqual(transferValue, kCVImageBufferTransferFunction_ITU_R_709_2) {
+      transferFunction = "BT.709"
+    } else {
+      transferFunction = "sRGB"
     }
     let primariesValue = CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey, nil)?.takeUnretainedValue()
+    let primaries: String
     if let primariesValue,
        !CFEqual(primariesValue, kCVImageBufferColorPrimaries_ITU_R_709_2),
        !CFEqual(primariesValue, kCVImageBufferColorPrimaries_SMPTE_C) {
       return nil
+    } else if let primariesValue, CFEqual(primariesValue, kCVImageBufferColorPrimaries_SMPTE_C) {
+      primaries = "SMPTE-C"
+    } else {
+      primaries = "sRGB"
     }
-    return (matrix, isFullRange)
+    return (matrix, isFullRange, matrixName, primaries, transferFunction)
   }
 
   private func reportFailureOnce(_ message: String) {
@@ -358,7 +401,7 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     frameLock.lock()
     isRenderInFlight = false
     var metricsToPublish: [String: Any]?
-    #if DEBUG
+    #if DEBUG || CHEM_INTERNAL_VALIDATION
     metricRenderedFrames += 1
     metricTotalGPUTime += gpuMilliseconds
     let now = CACurrentMediaTime()
@@ -375,17 +418,47 @@ public final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
       "activeLens": metricActiveLens,
       "cameraState": metricCameraState,
     ]
+    let validationPreview = (
+      configuredFPS: metricConfiguredFPS,
+      inputFPS: Int((Double(metricInputFrames) / elapsed).rounded()),
+      renderedFPS: Int((Double(metricRenderedFrames) / elapsed).rounded()),
+      droppedFrames: metricDroppedFrames,
+      renderMilliseconds: metricRenderedFrames == 0 ? 0 : metricTotalGPUTime / Double(metricRenderedFrames),
+      width: metricSourceWidth,
+      height: metricSourceHeight,
+      matrix: metricColorMatrix,
+      primaries: metricColorPrimaries,
+      transferFunction: metricTransferFunction,
+      range: metricColorRange
+    )
     metricBucketStartedAt = now
     metricInputFrames = 0
     metricRenderedFrames = 0
     metricDroppedFrames = 0
     metricTotalGPUTime = 0
     frameLock.unlock()
-    #else
-    frameLock.unlock()
+    #if CHEM_INTERNAL_VALIDATION
+    CHEMValidationDiagnostics.updatePreview(
+      configuredFPS: validationPreview.configuredFPS,
+      inputFPS: validationPreview.inputFPS,
+      renderedFPS: validationPreview.renderedFPS,
+      droppedFrames: validationPreview.droppedFrames,
+      renderMilliseconds: validationPreview.renderMilliseconds,
+      width: validationPreview.width,
+      height: validationPreview.height,
+      matrix: validationPreview.matrix,
+      primaries: validationPreview.primaries,
+      transferFunction: validationPreview.transferFunction,
+      range: validationPreview.range
+    )
     #endif
+    #if DEBUG
     if let metricsToPublish {
       onMetrics?(metricsToPublish)
     }
+    #endif
+    #else
+    frameLock.unlock()
+    #endif
   }
 }

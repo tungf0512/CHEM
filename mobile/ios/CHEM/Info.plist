@@ -8,6 +8,10 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>CHEM</string>
+	<key>CHEMGitCommitSHA</key>
+	<string>$(CHEM_GIT_COMMIT_SHA)</string>
+	<key>CHEMRendererBaselineVersion</key>
+	<string>$(CHEM_RENDERER_BASELINE_VERSION)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -28,6 +32,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>CHEM uses the camera for the live viewfinder and photos you choose to capture.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 	  <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->

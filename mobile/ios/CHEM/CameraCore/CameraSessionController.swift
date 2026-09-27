@@ -476,9 +476,23 @@ public final class CameraSessionController: NSObject, AVCaptureVideoDataOutputSa
           let device = activeInput?.device,
           let lens = activeLens else { return }
     let duration = CMTimeGetSeconds(device.exposureDuration)
+    let exposureSeconds = duration.isFinite && duration > 0 ? duration : 0
+    CHEMValidationDiagnostics.updateCamera(
+      physicalDeviceID: lens.physicalDeviceID,
+      role: lens.role.rawValue,
+      captureModeID: lens.captureMode.rawValue,
+      displayZoom: lens.displayZoom,
+      deviceZoomFactor: lens.deviceZoomFactor,
+      orientation: previewGeometry.orientation.orientationName
+    )
+    CHEMValidationDiagnostics.updateTelemetry(
+      iso: Double(device.iso),
+      shutterSeconds: exposureSeconds,
+      exposureEV: Double(device.exposureTargetBias)
+    )
     delegate?.cameraSessionController(self, didChangeTelemetry: [
       "iso": Double(device.iso),
-      "shutterSeconds": duration.isFinite && duration > 0 ? duration : 0,
+      "shutterSeconds": exposureSeconds,
       "lensDisplay": lens.displayZoom,
       "captureExposureCompensationEV": Double(device.exposureTargetBias),
     ])

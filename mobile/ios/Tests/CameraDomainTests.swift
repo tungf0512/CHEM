@@ -124,6 +124,16 @@ final class CameraDomainTests: XCTestCase {
     XCTAssertEqual(try JSONDecoder().decode(CaptureMetadata.self, from: JSONEncoder().encode(metadata)), metadata)
   }
 
+  func testValidationReportIsSmallMetadataOnlyJSON() throws {
+    let data = try XCTUnwrap(CHEMValidationDiagnostics.reportJSON().data(using: .utf8))
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    XCTAssertNotNil(object["build"] as? [String: Any])
+    XCTAssertNotNil(object["device"] as? [String: Any])
+    XCTAssertNil(object["pixels"])
+    XCTAssertNil(object["gps"])
+    XCTAssertNil(object["account"])
+  }
+
   func testCaptureStoreWritesSourceFirstInUUIDDirectoryAndRestoresCompleteRecord() throws {
     let root = makeTemporaryCaptureRoot()
     defer { try? FileManager.default.removeItem(at: root) }

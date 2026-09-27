@@ -2,6 +2,8 @@
 
 No physical camera item is marked complete. The first target is **iPhone Air**, whose 1× and 2× modes must be validated as two capture modes of the same physical Fusion Main sensor. Add other device records for physical Ultra Wide / Main / Telephoto combinations.
 
+Execute the step-by-step [device validation protocol](DEVICE_VALIDATION_PROTOCOL.md) with the internal TestFlight build. Its AIR-01 through AIR-10 cases are the authoritative first-pass evidence set; this checklist remains the durable per-device record.
+
 ## Device record
 
 ```text

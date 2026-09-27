@@ -69,34 +69,40 @@ jobs:
           working-directory: mobile
           bundler: "2.7.2"
 
-      - name: Regenerate lock metadata with selected Bundler
+      - name: Verify committed Ruby lock metadata
         id: bundle_lock
         working-directory: mobile
         run: |
-          set -o pipefail
-          bundle _2.7.2_ lock --bundler 2.7.2 2>&1 | tee ci-logs/bundle-lock.log
+          test -s Gemfile.lock
           locked_bundler="$(awk '/^BUNDLED WITH$/{getline; gsub(/^[[:space:]]+/, ""); print; exit}' Gemfile.lock)"
           test "$locked_bundler" = "2.7.2"
+          locked_ruby="$(awk '/^RUBY VERSION$/{getline; gsub(/^[[:space:]]+/, ""); print; exit}' Gemfile.lock)"
+          test "$locked_ruby" = "ruby 3.4.11p0"
 
       - name: Install locked Ruby dependencies
         id: bundle_install
         working-directory: mobile
         run: |
           set +e
-          bundle _2.7.2_ install --jobs 4 --retry 3 --verbose 2>&1 | tee ci-logs/bundle-install.log
+          BUNDLE_FROZEN=true bundle _2.7.2_ install --jobs 4 --retry 3 --verbose 2>&1 | tee ci-logs/bundle-install.log
           bundle_status=${PIPESTATUS[0]}
           set -e
+          if [ "$bundle_status" -eq 0 ]; then
+            git diff --exit-code -- Gemfile.lock
+          fi
           exit "$bundle_status"
 
       - name: Install CocoaPods dependencies
         id: pods
         working-directory: mobile
-        run: bundle _2.7.2_ exec pod install --project-directory=ios 2>&1 | tee ci-logs/pod-install.log
+        run: BUNDLE_FROZEN=true bundle _2.7.2_ exec pod install --project-directory=ios 2>&1 | tee ci-logs/pod-install.log
 
       - name: Verify resolved CocoaPods lockfile
         id: pod_lock
         working-directory: mobile
-        run: test -s ios/Podfile.lock
+        run: |
+          test -s ios/Podfile.lock
+          git diff --exit-code -- ios/Podfile.lock
 
       - name: Verify workspace and scheme
         id: xcode_list
@@ -179,7 +185,7 @@ jobs:
             echo
             echo "### Step outcomes"
             printf -- '- npm ci: `%s`; typecheck: `%s`; Jest: `%s`; lint: `%s`; Codegen: `%s`\n' "$NPM_CI_OUTCOME" "$TYPECHECK_OUTCOME" "$JEST_OUTCOME" "$LINT_OUTCOME" "$CODEGEN_OUTCOME"
-            printf -- '- Bundler lock refresh: `%s`; Bundler install: `%s`; CocoaPods: `%s`; workspace/scheme: `%s`; simulator build: `%s`; native tests: `%s`\n' "$BUNDLE_LOCK_OUTCOME" "$BUNDLE_OUTCOME" "$PODS_OUTCOME" "$XCODE_LIST_OUTCOME" "$IOS_BUILD_OUTCOME" "$NATIVE_TESTS_OUTCOME"
+            printf -- '- Bundler lock verification: `%s`; Bundler install: `%s`; CocoaPods: `%s`; workspace/scheme: `%s`; simulator build: `%s`; native tests: `%s`\n' "$BUNDLE_LOCK_OUTCOME" "$BUNDLE_OUTCOME" "$PODS_OUTCOME" "$XCODE_LIST_OUTCOME" "$IOS_BUILD_OUTCOME" "$NATIVE_TESTS_OUTCOME"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
 

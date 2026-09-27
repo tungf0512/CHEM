@@ -122,9 +122,8 @@ import UIKit
     case .interrupted: value = "interrupted"
     case .failed: value = "failed"
     }
-    #if DEBUG
+    CHEMValidationDiagnostics.updateLifecycle(state: value)
     renderer.updateCameraContext(state: value)
-    #endif
     onMain { delegate in
       delegate.cameraEngineDidChangeState(value, reason: reason, code: code?.rawValue ?? "")
     }
@@ -139,9 +138,7 @@ import UIKit
 
   func cameraSessionController(_ controller: CameraSessionController, didActivate lens: CameraLens) {
     let payload = lensPayload(lens)
-    #if DEBUG
     renderer.updateCameraContext(activeLens: lens.displayZoom)
-    #endif
     onMain { delegate in delegate.cameraEngineDidActivateLens(payload) }
   }
 
@@ -192,6 +189,12 @@ import UIKit
   ) {
     switch result {
     case .success(let metadata):
+      CHEMValidationDiagnostics.updateCapture(
+        id: metadata.id,
+        sourceSafe: metadata.sourceSafe,
+        complete: metadata.complete,
+        state: metadata.complete ? "complete" : "recoverable"
+      )
       let payload: [String: Any] = [
         "id": metadata.id,
         "sourceUri": metadata.sourceUri,

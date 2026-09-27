@@ -1,6 +1,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <React/RCTLog.h>
 #import <ReactCommon/RCTTurboModule.h>
+#import <UIKit/UIKit.h>
 
 #import "CHEM-Swift.h"
 #import <CHEMNativeSpec/CHEMNativeSpec.h>
@@ -49,6 +50,33 @@ RCT_EXPORT_MODULE(CHEMCameraModule)
 {
   // Metadata references only local Application Support files; photo bytes stay native.
   resolve([CHEMCaptureStore latestMetadataJSON]);
+}
+
+- (void)getValidationReport:(RCTPromiseResolveBlock)resolve
+                     reject:(RCTPromiseRejectBlock)reject
+{
+  resolve([CHEMValidationDiagnostics reportJSON]);
+}
+
+- (void)copyValidationReport:(RCTPromiseResolveBlock)resolve
+                      reject:(RCTPromiseRejectBlock)reject
+{
+  NSString *report = [CHEMValidationDiagnostics reportJSON];
+  [UIPasteboard generalPasteboard].string = report;
+  resolve(report);
+}
+
+- (void)isInternalValidationEnabled:(RCTPromiseResolveBlock)resolve
+                             reject:(RCTPromiseRejectBlock)reject
+{
+  resolve(@([CHEMValidationDiagnostics isInternalValidationEnabled]));
+}
+
+- (void)setValidationFault:(NSString *)point
+                    resolve:(RCTPromiseResolveBlock)resolve
+                     reject:(RCTPromiseRejectBlock)reject
+{
+  resolve(@([CHEMCaptureStore setInternalValidationFailurePoint:point]));
 }
 
 - (NSString *)cameraPermissionStatus

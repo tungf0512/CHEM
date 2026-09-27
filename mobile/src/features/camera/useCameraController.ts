@@ -43,6 +43,7 @@ export function useCameraController() {
   const [appIsActive, setAppIsActive] = useState(AppState.currentState === 'active');
   const [previewSize, setPreviewSize] = useState({width: 0, height: 0});
   const [focusPoint, setFocusPoint] = useState<{x: number; y: number} | null>(null);
+  const [internalValidationEnabled, setInternalValidationEnabled] = useState(false);
   const presentation = permissionPresentation(state.permission);
   const cameraNativeSupported = Platform.OS === 'ios' && CameraModule !== null;
   const nativeCameraActive = cameraNativeSupported && state.permission === 'authorized' && appIsActive;
@@ -76,6 +77,17 @@ export function useCameraController() {
           }
         })
         .catch(() => undefined);
+      CameraModule.isInternalValidationEnabled()
+        .then(enabled => {
+          if (mounted) {
+            setInternalValidationEnabled(enabled);
+          }
+        })
+        .catch(() => {
+          if (mounted) {
+            setInternalValidationEnabled(false);
+          }
+        });
     }
     const subscription = AppState.addEventListener('change', nextState => {
       setAppIsActive(nextState === 'active');
@@ -265,6 +277,7 @@ export function useCameraController() {
     cameraNativeSupported,
     nativeCameraActive,
     cameraConnected,
+    internalValidationEnabled,
     presentation,
     focusPoint,
     lifecycleLabel,

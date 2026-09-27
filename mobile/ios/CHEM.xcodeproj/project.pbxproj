@@ -317,7 +317,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CHEM_BUILD_NUMBER = 1;
+				CHEM_BUNDLE_ID = com.chem.camera;
+				CHEM_GIT_COMMIT_SHA = unknown;
+				CHEM_RENDERER_BASELINE_VERSION = neutral-sdr-v1;
+				CURRENT_PROJECT_VERSION = $(CHEM_BUILD_NUMBER);
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = CHEM/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -325,13 +329,13 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.chem.camera;
+				PRODUCT_BUNDLE_IDENTIFIER = $(CHEM_BUNDLE_ID);
 				PRODUCT_NAME = CHEM;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -347,20 +351,24 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CHEM_BUILD_NUMBER = 1;
+				CHEM_BUNDLE_ID = com.chem.camera;
+				CHEM_GIT_COMMIT_SHA = unknown;
+				CHEM_RENDERER_BASELINE_VERSION = neutral-sdr-v1;
+				CURRENT_PROJECT_VERSION = $(CHEM_BUILD_NUMBER);
 				INFOPLIST_FILE = CHEM/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.chem.camera;
+				PRODUCT_BUNDLE_IDENTIFIER = $(CHEM_BUNDLE_ID);
 				PRODUCT_NAME = CHEM;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
