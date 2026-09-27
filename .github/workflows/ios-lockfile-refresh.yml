@@ -61,7 +61,7 @@ jobs:
           pod_status=${PIPESTATUS[0]}
           set -e
           if [ "$pod_status" -ne 0 ]; then
-            excerpt="$(tail -n 45 ci-pod-install.log | tr '\r\n' ' ' | cut -c 1-3000)"
+            excerpt="$( { grep -E '^\[!\]|Error|No such|cannot|Could not|undefined' ci-pod-install.log || true; tail -n 45 ci-pod-install.log; } | tail -n 70 | tr '\r\n' ' ' | cut -c 1-3000)"
             {
               echo "## CocoaPods failure tail"
               echo
