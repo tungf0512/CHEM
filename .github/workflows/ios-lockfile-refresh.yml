@@ -88,6 +88,12 @@ jobs:
             bundle _2.7.2_ exec pod --version
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Discard CocoaPods-generated source drift
+        if: success()
+        run: |
+          git restore -- mobile/ios/CHEM.xcodeproj/project.pbxproj mobile/ios/CHEM/Info.plist
+          rm -rf mobile/ios/CHEM.xcworkspace
+
       - name: Upload resolver diagnostics
         if: always()
         uses: actions/upload-artifact@v7
