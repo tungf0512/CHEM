@@ -2,9 +2,6 @@ name: Refresh iOS dependency lockfiles
 
 on:
   workflow_dispatch:
-  # Bootstrap only: this path is removed immediately after the macOS runner
-  # commits the canonical lockfiles. Normal refreshes remain manual.
-  # Resolver attempt includes the Nanaimo parser compatibility fix.
   push:
     paths:
       - ".github/workflows/ios-lockfile-refresh.yml"

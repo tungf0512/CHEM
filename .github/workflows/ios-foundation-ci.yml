@@ -77,7 +77,11 @@ jobs:
           locked_bundler="$(awk '/^BUNDLED WITH$/{getline; gsub(/^[[:space:]]+/, ""); print; exit}' Gemfile.lock)"
           test "$locked_bundler" = "2.7.2"
           locked_ruby="$(awk '/^RUBY VERSION$/{getline; gsub(/^[[:space:]]+/, ""); print; exit}' Gemfile.lock)"
-          test "$locked_ruby" = "ruby 3.4.11p0"
+          expected_ruby="$(tr -d '\r\n' < .ruby-version)"
+          case "$locked_ruby" in
+            "ruby ${expected_ruby}p"*) ;;
+            *) echo "Gemfile.lock Ruby metadata does not match .ruby-version: $locked_ruby vs $expected_ruby"; exit 1 ;;
+          esac
 
       - name: Install locked Ruby dependencies
         id: bundle_install
