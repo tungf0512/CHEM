@@ -58,16 +58,17 @@ jobs:
         working-directory: mobile
         run: |
           set +e
-          bundle _2.7.2_ exec pod install --project-directory=ios 2>&1 | tee ci-pod-install.log
+          pod_log="$RUNNER_TEMP/chem-pod-install.log"
+          bundle _2.7.2_ exec pod install --project-directory=ios 2>&1 | tee "$pod_log"
           pod_status=${PIPESTATUS[0]}
           set -e
           if [ "$pod_status" -ne 0 ]; then
-            excerpt="$( { grep -E '^\[!\]|Error|No such|cannot|Could not|undefined' ci-pod-install.log || true; tail -n 45 ci-pod-install.log; } | tail -n 70 | tr '\r\n' ' ' | cut -c 1-3000)"
+            excerpt="$( { grep -E '^\[!\]|Error|No such|cannot|Could not|undefined' "$pod_log" || true; tail -n 45 "$pod_log"; } | tail -n 70 | tr '\r\n' ' ' | cut -c 1-3000)"
             {
               echo "## CocoaPods failure tail"
               echo
               echo '```text'
-              tail -n 120 ci-pod-install.log
+              tail -n 120 "$pod_log"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             escaped_excerpt="$(printf '%s' "$excerpt" | sed 's/%/%25/g')"
@@ -93,7 +94,7 @@ jobs:
         with:
           name: ios-lockfile-refresh-logs-${{ github.run_id }}
           if-no-files-found: warn
-          path: mobile/ci-pod-install.log
+          path: ${{ runner.temp }}/chem-pod-install.log
 
       - name: Validate generated lockfile scope
         run: |
