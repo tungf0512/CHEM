@@ -2,7 +2,7 @@
 
 Status distinguishes source work from executable verification. A native implementation is not considered build-verified until it compiles with Xcode on macOS. No camera behavior is considered device-verified until it has been run on hardware.
 
-Current verification labels: JavaScript is locally build-verified; native iOS is not build-verified; simulator-verified = no; device-verified = no; GitHub CI-verified = no. The workflow and native test suite are scaffolded for macOS execution but are awaiting a runner.
+Current verification labels: JavaScript is locally build-verified; native iOS is not build-verified; simulator-verified = no; device-verified = no; GitHub CI-verified = no (the first Actions run failed before CocoaPods/Xcode). A Ruby/Bundler reproducibility repair and diagnostics iteration is now being run on the macOS workflow.
 
 ## Foundation milestone
 
@@ -18,8 +18,8 @@ Current verification labels: JavaScript is locally build-verified; native iOS is
 | Source-safe capture store and recovery | implemented in source | Atomic source-first flow, write-once UUID directory, recoverable derived failures, scan/reconstruction, and debug fault injection are implemented. Swift tests are authored, not run. |
 | Swift native foundation tests | implemented | 15 pure-domain tests in `mobile/ios/Tests/CameraDomainTests.swift`; not locally run because Swift is unavailable. Workflow runs `swift test --package-path ios`. |
 | Xcode target, bundle identifier, scheme | scaffolded/hardened | Target source membership, iPhone-only family, provisional `com.chem.camera` ID, and dangling scheme test reference are fixed in source. Project was not opened/built in Xcode. |
-| macOS iOS foundation CI | scaffolded | `.github/workflows/ios-foundation-ci.yml` added and YAML/Prettier-checked; no Git remote or `gh` CLI is available, so there is no CI run/evidence yet. |
-| CocoaPods integration | scaffolded, blocked | Gemfile lock was resolved, but local bundle install cannot compile `bigdecimal` because Ruby development headers are absent; `pod install` is unavailable. No `Podfile.lock` yet. |
+| macOS iOS foundation CI | implemented, not green yet | First run `36265627280` failed at `Install locked Ruby dependencies` with exit code 5. Public Actions metadata confirms JavaScript and Codegen passed; CocoaPods/Xcode/native tests were skipped. See `docs/CI_NATIVE_BUILD_VERIFICATION.md`. |
+| CocoaPods integration | not CI-verified | Local Linux lacks `bundle`, `pod`, and Xcode. The next macOS iteration uses a pinned Ruby/Bundler pair and uploads generated lockfiles; no successful `Podfile.lock` resolution is claimed yet. |
 | Simulator behavior | not implemented as camera validation | No simulator runtime was available; the CI simulator build is intended only as an integration/compile gate. |
 | Physical iPhone validation | blocked / not device-verified | No iPhone attached. iPhone Air is the first target; all checklist items remain unchecked. |
 | Neutral preview copy | placeholder | Clearly signals the neutral baseline only; no film effect is present. |
@@ -52,7 +52,7 @@ Commands run from `mobile/` unless noted. `CI-verified` below means an actual Gi
 | `xcodebuild -list -workspace CHEM.xcworkspace` | Blocked: `xcodebuild` unavailable. |
 | `xcodebuild -workspace CHEM.xcworkspace -scheme CHEM -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build` | Blocked: `xcodebuild` unavailable. |
 | `swift test --package-path ios` | Blocked: `swift` unavailable; the 15 tests remain unrun. |
-| GitHub Actions | Not triggered/observed: no configured Git remote and no `gh` executable. Workflow awaits a runner; CI-verified = no. |
+| GitHub Actions | First run `36265627280` failed at Bundler (exit 5). The public run metadata is available, but GitHub returns an admin-rights error for raw run logs/artifact download; the revised workflow publishes failure tails in the job summary. CI-verified = no until a full green run. |
 | iOS simulator / iPhone Air | Not verified: no simulator/Xcode and no physical device. Device-verified = no. |
 
 See [foundation verification](FOUNDATION_VERIFICATION.md), [dependency policy](DEPENDENCY_POLICY.md), [color baseline](COLOR_PIPELINE_BASELINE.md), [performance baseline](PERFORMANCE_BASELINE.md), and [physical-device checklist](PHYSICAL_DEVICE_VALIDATION.md) for details.

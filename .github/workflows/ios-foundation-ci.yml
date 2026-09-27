@@ -22,69 +22,82 @@ jobs:
   ios-foundation:
     name: iOS native integration and domain tests
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Create CI log directory
         working-directory: mobile
         run: mkdir -p ci-logs
 
       - name: Configure Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: mobile/.nvmrc
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
       - name: Install JavaScript dependencies
+        id: npm_ci
         working-directory: mobile
-        run: npm ci
+        run: npm ci 2>&1 | tee ci-logs/npm-ci.log
 
       - name: Typecheck
+        id: typecheck
         working-directory: mobile
-        run: npm run typecheck
+        run: npm run typecheck 2>&1 | tee ci-logs/typecheck.log
 
       - name: Jest
+        id: jest
         working-directory: mobile
-        run: npm test -- --runInBand
+        run: npm test -- --runInBand 2>&1 | tee ci-logs/jest.log
 
       - name: Lint
+        id: lint
         working-directory: mobile
-        run: npm run lint
+        run: npm run lint 2>&1 | tee ci-logs/lint.log
 
       - name: Generate iOS Codegen artifacts
+        id: codegen
         working-directory: mobile
-        run: npm run codegen:ios
+        run: npm run codegen:ios 2>&1 | tee ci-logs/codegen.log
 
-      - name: Configure Ruby
+      - name: Configure Ruby and Bundler
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.2"
+          working-directory: mobile
+          bundler: "2.7.2"
 
       - name: Install locked Ruby dependencies
+        id: bundle_install
         working-directory: mobile
         run: |
-          set -o pipefail
-          bundle install --jobs 4 --retry 3 2>&1 | tee ci-logs/bundle-install.log
+          set +e
+          bundle install --jobs 4 --retry 3 --verbose 2>&1 | tee ci-logs/bundle-install.log
+          bundle_status=${PIPESTATUS[0]}
+          set -e
+          exit "$bundle_status"
 
       - name: Install CocoaPods dependencies
+        id: pods
         working-directory: mobile
-        run: |
-          set -o pipefail
-          bundle exec pod install --project-directory=ios 2>&1 | tee ci-logs/pod-install.log
+        run: bundle exec pod install --project-directory=ios 2>&1 | tee ci-logs/pod-install.log
+
+      - name: Verify resolved CocoaPods lockfile
+        id: pod_lock
+        working-directory: mobile
+        run: test -s ios/Podfile.lock
 
       - name: Verify workspace and scheme
+        id: xcode_list
         working-directory: mobile
-        run: |
-          set -o pipefail
-          xcodebuild -list -workspace ios/CHEM.xcworkspace 2>&1 | tee ci-logs/xcode-list.log
+        run: xcodebuild -list -workspace ios/CHEM.xcworkspace 2>&1 | tee ci-logs/xcode-list.log
 
       - name: Build iOS Simulator target
+        id: ios_build
         working-directory: mobile
         run: |
-          set -o pipefail
           xcodebuild \
             -workspace ios/CHEM.xcworkspace \
             -scheme CHEM \
@@ -95,25 +108,81 @@ jobs:
             build 2>&1 | tee ci-logs/ios-simulator-build.log
 
       - name: Run native domain tests
+        id: native_tests
         working-directory: mobile
-        run: |
-          set -o pipefail
-          swift test --package-path ios 2>&1 | tee ci-logs/native-domain-tests.log
+        run: swift test --package-path ios 2>&1 | tee ci-logs/native-domain-tests.log
 
-      - name: Preserve resolved CocoaPods lockfile
+      - name: Preserve resolved Ruby and CocoaPods lockfiles
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: ios-pod-lockfile-${{ github.run_id }}
+          name: ios-foundation-lockfiles-${{ github.run_id }}
           if-no-files-found: warn
-          path: mobile/ios/Podfile.lock
+          path: |
+            mobile/Gemfile.lock
+            mobile/ios/Podfile.lock
 
-      - name: Preserve native logs on failure
+      - name: Preserve native and JavaScript logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-foundation-logs-${{ github.run_id }}
           if-no-files-found: warn
-          path: |
-            mobile/ci-logs/
-            mobile/ios/Podfile.lock
+          path: mobile/ci-logs/
+
+      - name: Publish toolchain and failure diagnostics
+        if: always()
+        working-directory: mobile
+        env:
+          JOB_STATUS: ${{ job.status }}
+          NPM_CI_OUTCOME: ${{ steps.npm_ci.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          JEST_OUTCOME: ${{ steps.jest.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          CODEGEN_OUTCOME: ${{ steps.codegen.outcome }}
+          BUNDLE_OUTCOME: ${{ steps.bundle_install.outcome }}
+          PODS_OUTCOME: ${{ steps.pods.outcome }}
+          XCODE_LIST_OUTCOME: ${{ steps.xcode_list.outcome }}
+          IOS_BUILD_OUTCOME: ${{ steps.ios_build.outcome }}
+          NATIVE_TESTS_OUTCOME: ${{ steps.native_tests.outcome }}
+        run: |
+          ruby_version="$(ruby --version 2>&1 || true)"
+          bundler_version="$(bundle --version 2>&1 || true)"
+          cocoapods_version="$(bundle exec pod --version 2>&1 || true)"
+          xcode_version="$(xcodebuild -version 2>&1 | tr '\n' ' ' || true)"
+          react_native_version="$(node -p 'require("react-native/package.json").version' 2>&1 || true)"
+          lock_bundler_version="$(awk '/^BUNDLED WITH$/{getline; gsub(/^[[:space:]]+/, ""); print; exit}' Gemfile.lock 2>/dev/null || true)"
+          lock_ruby_version="$(awk '/^RUBY VERSION$/{getline; gsub(/^[[:space:]]+/, ""); print; exit}' Gemfile.lock 2>/dev/null || true)"
+
+          {
+            echo "## iOS foundation CI diagnostics"
+            echo
+            printf -- '- Commit: `%s`\n' "$GITHUB_SHA"
+            printf -- '- Ruby: `%s`\n' "${ruby_version:-unavailable}"
+            printf -- '- Bundler executable: `%s`\n' "${bundler_version:-unavailable}"
+            printf -- '- Gemfile.lock Ruby: `%s`\n' "${lock_ruby_version:-missing}"
+            printf -- '- Gemfile.lock Bundler: `%s`\n' "${lock_bundler_version:-missing}"
+            printf -- '- CocoaPods: `%s`\n' "${cocoapods_version:-unavailable}"
+            printf -- '- Xcode: `%s`\n' "${xcode_version:-unavailable}"
+            printf -- '- Node / React Native: `%s` / `%s`\n' "$(node --version 2>&1 || true)" "${react_native_version:-unavailable}"
+            printf -- '- Run: [#%s](https://github.com/%s/actions/runs/%s)\n' "$GITHUB_RUN_ID" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            echo
+            echo "### Step outcomes"
+            printf -- '- npm ci: `%s`; typecheck: `%s`; Jest: `%s`; lint: `%s`; Codegen: `%s`\n' "$NPM_CI_OUTCOME" "$TYPECHECK_OUTCOME" "$JEST_OUTCOME" "$LINT_OUTCOME" "$CODEGEN_OUTCOME"
+            printf -- '- Bundler: `%s`; CocoaPods: `%s`; workspace/scheme: `%s`; simulator build: `%s`; native tests: `%s`\n' "$BUNDLE_OUTCOME" "$PODS_OUTCOME" "$XCODE_LIST_OUTCOME" "$IOS_BUILD_OUTCOME" "$NATIVE_TESTS_OUTCOME"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$JOB_STATUS" != "success" ]; then
+            for log_file in ci-logs/npm-ci.log ci-logs/typecheck.log ci-logs/jest.log ci-logs/lint.log ci-logs/codegen.log ci-logs/bundle-install.log ci-logs/pod-install.log ci-logs/xcode-list.log ci-logs/ios-simulator-build.log ci-logs/native-domain-tests.log; do
+              if [ -s "$log_file" ]; then
+                excerpt="$(tail -n 45 "$log_file" | tr '\r\n' ' ' | cut -c 1-3000)"
+                {
+                  printf '\n### `%s` (tail)\n\n' "$log_file"
+                  printf '\n```text\n%s\n```\n' "$excerpt"
+                } >> "$GITHUB_STEP_SUMMARY"
+                escaped_excerpt="$(printf '%s' "$excerpt" | sed 's/%/%25/g')"
+                printf '::error title=CI failure details (%s)::%s\n' "$log_file" "$escaped_excerpt"
+              fi
+            done
+          fi
