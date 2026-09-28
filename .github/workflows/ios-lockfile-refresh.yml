@@ -2,9 +2,6 @@ name: Refresh iOS dependency lockfiles
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - ".github/workflows/ios-lockfile-refresh.yml"
 
 permissions:
   contents: write
